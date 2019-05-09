@@ -345,7 +345,7 @@ class tagging_tool(Frame):
         self.video_handle = cv2.VideoCapture(self.video_file)
         self.video_dir, self.video_name = os.path.split(self.video_file)
         self.video_name = os.path.splitext(self.video_name)[0]
-        self.img_folder = video_dir + '/' + self.video_name + '_frames'
+        self.img_folder = self.video_dir + '/' + self.video_name + '_frames'
         self.num_imgs = int(self.video_handle.get(cv2.CAP_PROP_FRAME_COUNT))
         self.sequence_file_name = self.img_folder + '/sequences_info.pickle'
         
