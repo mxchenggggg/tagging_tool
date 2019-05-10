@@ -70,7 +70,10 @@ class tagging_tool(Frame):
         master.geometry("1320x530")
         self.sequences = []
         self.init_window()
+        master.bind('s',lambda event: self.previous_image())
+        master.bind('w',lambda event: self.next_image())
 
+    
 ############################################
 #       initializing the main window       #
 ############################################
@@ -88,6 +91,9 @@ class tagging_tool(Frame):
         # self.test.pack(side="bottom")
         # self.reset()
         self.init_sub_frames()
+        self.img_iter = -1
+
+
 
 ############################################
 #                   reset                  #
@@ -500,9 +506,12 @@ class tagging_tool(Frame):
         self.show_img() 
 
     def start_sequence(self):
+        self.master.update()
+        print('here')
         if self.img_iter == -1:
             return
         tags = np.concatenate((self.road_type_selected,self.road_condition_selected,self.weather_selected,self.image_quality_selected))
+        print(np.sum(tags))
         if np.sum(tags) == 0:
             messagebox.showerror('Error', 'No tags selected!')
             return 
@@ -648,7 +657,8 @@ class tagging_tool(Frame):
                         copyfile(cur_img, copied)
                 
     def quit_func(self):
-        self.save_tags()
+        if self.img_iter < 0:
+            self.save_tags()
         self.master.destroy()
     
     def pre_load_videos(self):
