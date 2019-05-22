@@ -142,7 +142,7 @@ class tagging_tool(Frame):
         y += 30
 
         # initialize buttons
-        self.load_video_button = Button(op_f, text='Load Video', command=self.load_video)
+        self.load_video_button = Button(op_f, text='Load Video', command=self.load_video_and_auto_tag)
         self.load_video_button.place(x=x, y=y, width=w, height=h)
         y += 30
         self.load_folder_button = Button(op_f, text='Load folder', command=self.load_folder)
@@ -394,6 +394,75 @@ class tagging_tool(Frame):
         x, y = self.scrollbar.get()
         self.scrollbar_len = y-x
         self.cur_sequence = sequence(self.image_canvas, self.step)
+        self.video_handle.release()
+
+    def load_video_and_auto_tag(self):
+        value =  filedialog.askopenfilename(initialdir = '/mnt/storage/public/mcity_data/Batch5',title = "Please select video",filetypes = (("MKV files","*.mkv"),("AVI files","*.avi"),("MP4 files","*.mp4*"), ("All files","*.*")))
+        if value is () or value is '':
+            return
+        self.reset()
+        self.video_file = value
+        self.video_handle = cv2.VideoCapture(self.video_file)
+        self.video_dir, self.video_name = os.path.split(self.video_file)
+        self.video_name = os.path.splitext(self.video_name)[0]
+        self.img_folder = self.video_dir + '/' + self.video_name + '_frames'
+        self.num_imgs = int(self.video_handle.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.sequence_file_name = self.img_folder + '/sequences_info.pickle'
+
+        if not os.path.isdir(self.img_folder):
+            gps_data = pickle.load(open(os.path.join(self.video_dir,'vehicle_gps.txt'), 'rb'))
+            timestemp_file = open(os.path.join(self.video_dir,self.video_name+'.txt'), 'rb')
+            self.video_timestamp = []
+            for line in timestemp_file:
+                l = line.replace(b',', b' ').split()
+                self.video_timestamp.append(int(l[1])*10**(-3))
+            self.gps_data = []
+            self.image_frame_ind = []
+            ind, i = 0, 0
+            max_diff = 0
+            bad = 0
+            while i < len(gps_data):
+                cur_gps_time = gps_data[i][3] +  gps_data[i][4]*10**(-9)
+                while ind < len(self.video_timestamp) and self.video_timestamp[ind] < cur_gps_time:
+                    ind += 1
+                if ind == len(self.video_timestamp):
+                    break
+                if self.video_timestamp[ind] - cur_gps_time < 0.5:
+                    diff = self.video_timestamp[ind] - cur_gps_time
+                    self.image_frame_ind.append(ind)
+                i += 1
+            os.mkdir(self.img_folder)
+            message = self.show_message('Loading video')
+            self.num_img_digit_count, temp = 0, self.num_imgs
+            while temp > 0:
+                temp = temp // 10
+                self.num_img_digit_count += 1
+            for ind in self.image_frame_ind:
+                self.video_handle.set(1, ind)
+                success, cur_img = self.video_handle.read()
+                cv2.imwrite(self.img_folder + '/' + self.video_name + '_frame_' + str(ind).zfill(self.num_img_digit_count) + '.jpg', cur_img)
+
+            self.close_message(message)
+            self.img_files = sorted(glob.glob(self.img_folder + '/*.jpg'))
+            self.num_imgs = len(self.img_files)
+        else:
+            self.img_files = sorted(glob.glob(self.img_folder + '/*.jpg'))
+            self.num_imgs = len(self.img_files)
+            self.show_message('Video already loaded! Step is {}.'.format(self.step))
+
+        self.img_iter += 1           
+        self.show_img()
+        self.try_load_tags()
+        self.scrollbar_canvas.config(scrollregion=(0,0,100*self.num_imgs,0))
+        self.scrollbar.update()
+        x, y = self.scrollbar.get()
+        self.scrollbar_len = y-x
+        self.cur_sequence = sequence(self.image_canvas, self.step)
+        self.video_handle.release()
+     
+            
+
+            
 
     def load_folder(self):
         value = filedialog.askdirectory(initialdir = '/mnt/storage/public/mcity_data/Batch5', title = "Please select folder")
