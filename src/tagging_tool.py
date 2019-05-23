@@ -6,6 +6,10 @@ import os, glob, string
 from shutil import copyfile
 import numpy as np
 import pickle
+from math import sin, cos, atan2, sqrt, pi
+
+# radius of the earth
+R = 6.371*(10**6)
 
 class sequence:
     def __init__(self, canvas=None, step=None):
@@ -221,11 +225,6 @@ class tagging_tool(Frame):
     def select_road_type(self):
         self.road_type_selected = np.zeros(11, dtype=int)
         self.road_type_selected[list(self.road_type_list.curselection())]=1
-        # print('selected road type: ')
-        # print(self.road_type_selected)
-        # print(self.road_condition_selected)
-        # print(self.weather_selected)
-        # print(self.image_quality_selected, '\n')
 
     # initializing road condition selection frame
     def init_road_condition_frame(self):
@@ -245,11 +244,6 @@ class tagging_tool(Frame):
     def select_road_condition(self):
         self.road_condition_selected = np.zeros(6, dtype=int)
         self.road_condition_selected[list(self.road_condition_list.curselection())]=1
-        # print('selected road condition: ')
-        # print(self.road_type_selected)
-        # print(self.road_condition_selected)
-        # print(self.weather_selected)
-        # print(self.image_quality_selected, '\n')
 
     # initializing weather selection frame
     def init_weather_frame(self): 
@@ -269,11 +263,6 @@ class tagging_tool(Frame):
     def select_weather(self):
         self.weather_selected = np.zeros(5, dtype=int)
         self.weather_selected[list(self.weather_list.curselection())]=1
-        # print('selected weather: ')
-        # print(self.road_type_selected)
-        # print(self.road_condition_selected)
-        # print(self.weather_selected)
-        # print(self.image_quality_selected, '\n')
 
     # initializing image quality selectino frame
     def init_image_quality_frame(self):
@@ -293,11 +282,6 @@ class tagging_tool(Frame):
     def select_image_quality(self):
         self.image_quality_selected = np.zeros(4, dtype=int)
         self.image_quality_selected[list(self.image_quality_list.curselection())]=1
-        # print('selected image quality: ')
-        # print(self.road_type_selected)
-        # print(self.road_condition_selected)
-        # print(self.weather_selected)
-        # print(self.image_quality_selected, '\n')
 
     # initializing scrollbar frame
     def init_scrollbar_frame(self):
@@ -409,28 +393,9 @@ class tagging_tool(Frame):
         self.num_imgs = int(self.video_handle.get(cv2.CAP_PROP_FRAME_COUNT))
         self.sequence_file_name = self.img_folder + '/sequences_info.pickle'
 
+        self.load_gps_get_frame_ind()
+        
         if not os.path.isdir(self.img_folder):
-            gps_data = pickle.load(open(os.path.join(self.video_dir,'vehicle_gps.txt'), 'rb'))
-            timestemp_file = open(os.path.join(self.video_dir,self.video_name+'.txt'), 'rb')
-            self.video_timestamp = []
-            for line in timestemp_file:
-                l = line.replace(b',', b' ').split()
-                self.video_timestamp.append(int(l[1])*10**(-3))
-            self.gps_data = []
-            self.image_frame_ind = []
-            ind, i = 0, 0
-            max_diff = 0
-            bad = 0
-            while i < len(gps_data):
-                cur_gps_time = gps_data[i][3] +  gps_data[i][4]*10**(-9)
-                while ind < len(self.video_timestamp) and self.video_timestamp[ind] < cur_gps_time:
-                    ind += 1
-                if ind == len(self.video_timestamp):
-                    break
-                if self.video_timestamp[ind] - cur_gps_time < 0.5:
-                    diff = self.video_timestamp[ind] - cur_gps_time
-                    self.image_frame_ind.append(ind)
-                i += 1
             os.mkdir(self.img_folder)
             message = self.show_message('Loading video')
             self.num_img_digit_count, temp = 0, self.num_imgs
@@ -441,7 +406,7 @@ class tagging_tool(Frame):
                 self.video_handle.set(1, ind)
                 success, cur_img = self.video_handle.read()
                 cv2.imwrite(self.img_folder + '/' + self.video_name + '_frame_' + str(ind).zfill(self.num_img_digit_count) + '.jpg', cur_img)
-
+                # print(self.img_folder + '/' + self.video_name + '_frame_' + str(ind).zfill(self.num_img_digit_count) + '.jpg')
             self.close_message(message)
             self.img_files = sorted(glob.glob(self.img_folder + '/*.jpg'))
             self.num_imgs = len(self.img_files)
@@ -449,6 +414,8 @@ class tagging_tool(Frame):
             self.img_files = sorted(glob.glob(self.img_folder + '/*.jpg'))
             self.num_imgs = len(self.img_files)
             self.show_message('Video already loaded! Step is {}.'.format(self.step))
+
+        self.auto_tag()
 
         self.img_iter += 1           
         self.show_img()
@@ -459,11 +426,8 @@ class tagging_tool(Frame):
         self.scrollbar_len = y-x
         self.cur_sequence = sequence(self.image_canvas, self.step)
         self.video_handle.release()
-     
-            
-
-            
-
+        
+        
     def load_folder(self):
         value = filedialog.askdirectory(initialdir = '/mnt/storage/public/mcity_data/Batch5', title = "Please select folder")
         if value is () or value is '':
@@ -474,13 +438,20 @@ class tagging_tool(Frame):
         temp = os.path.split(value)[1]
         pos = temp.find('_frames')
         self.video_name = temp[0:pos]
+
+        self.load_gps_get_frame_ind()
+
         self.img_files = sorted(glob.glob(self.img_folder + '/*.jpg'))
         self.num_imgs = len(self.img_files)
-        loc1, loc2 = self.img_files[0].find('frame_'), self.img_files[0].find('.jpg')
-        loc3, loc4 = self.img_files[1].find('frame_'), self.img_files[1].find('.jpg')
-        self.step = int(self.img_files[1][loc3+6:loc4]) - int(self.img_files[0][loc1+6:loc2])
-        self.step_strvar.set(str(self.step))
+        # loc1, loc2 = self.img_files[0].find('frame_'), self.img_files[0].find('.jpg')
+        # loc3, loc4 = self.img_files[1].find('frame_'), self.img_files[1].find('.jpg')
+        # self.step = int(self.img_files[1][loc3+6:loc4]) - int(self.img_files[0][loc1+6:loc2])
+        # self.step_strvar.set(str(self.step))
+        self.step = None
         self.show_message('Folder loaded! Step is {}.'.format(self.step))
+
+        self.auto_tag()
+
         self.img_iter += 1
         self.show_img()
         self.try_load_tags()
@@ -508,7 +479,6 @@ class tagging_tool(Frame):
         output_file_name = os.path.splitext(cur_img)[0] + '.txt'
         if os.path.exists(output_file_name):
             os.remove(output_file_name)
-        # tags = self.road_type_selected + self.road_type_selected + self.weather_selected + self.image_quality_selected
         tags = np.concatenate((self.road_type_selected,self.road_condition_selected,self.weather_selected,self.image_quality_selected))
         if np.sum(tags) != 0:
             output_file = open(output_file_name, 'w')
@@ -772,7 +742,8 @@ class tagging_tool(Frame):
         render = ImageTk.PhotoImage(image = Image.fromarray(load))
         self.image_canvas.create_image(0, 0, image=render, anchor=NW)
         self.image_canvas.photo = render
-        self.image_iter_strvar.set(str(self.img_iter * self.step))
+        # self.image_iter_strvar.set(str(self.img_iter * self.step))
+        self.image_iter_strvar.set(str(self.image_frame_ind[self.img_iter]))
         self.image_canvas.update()
                 
     def show_message(self, content):
@@ -859,6 +830,56 @@ class tagging_tool(Frame):
         for s in self.sequences:
             s.destroy_plot()
         self.sequences = []
+
+    def get_distance(self, pt1, pt2):
+        pt1 = np.array(pt1) / 180 * pi
+        pt2 = np.array(pt2) / 180 * pi
+        d_phi = pt2[0] - pt1[0]
+        d_lambda = pt2[1] - pt1[1]
+        a = (np.sin(d_phi/2))**2 + cos(pt1[0])*cos(pt2[0])*((sin(d_lambda/2))**2)
+        c = 2 * atan2(sqrt(a), sqrt(1-a))
+        return R * c
+
+    def load_gps_get_frame_ind(self):
+        gps_data = pickle.load(open(os.path.join(self.video_dir,'vehicle_gps.txt'), 'rb'))
+        timestemp_file = open(os.path.join(self.video_dir,self.video_name+'.txt'), 'rb')
+        self.video_timestamp = []
+        for line in timestemp_file:
+            l = line.replace(b',', b' ').split()
+            self.video_timestamp.append(int(l[1])*10**(-3))
+        self.gps_data = []
+        self.image_frame_ind = []
+        ind, i = 0, 0
+        max_diff = 0
+        bad = 0
+        while i < len(gps_data):
+            cur_gps_time = gps_data[i][3] +  gps_data[i][4]*10**(-9)
+            while ind < len(self.video_timestamp) and self.video_timestamp[ind] < cur_gps_time:
+                ind += 1
+            if ind == len(self.video_timestamp):
+                break
+            if self.video_timestamp[ind] - cur_gps_time < 0.5:
+                diff = self.video_timestamp[ind] - cur_gps_time
+                self.image_frame_ind.append(ind)
+                self.gps_data.append(gps_data[i])
+            i += 1
+        
+    def auto_tag(self):
+        self.adj_dis = []
+        for i in range(len(self.gps_data)-1):
+            dis = self.get_distance(self.gps_data[i][0:2],self.gps_data[i+1][0:2])
+            self.adj_dis.append(dis)
+            
+        for i in range(len(self.gps_data)-10):
+            dis = self.get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
+            # print(self.image_frame_ind[i], dis, np.sum(self.adj_dis[i:i+10]))
+            diff = np.sum(self.adj_dis[i:i+10]) - dis
+            # if diff > 1:
+            #     print(self.image_frame_ind[i+5], 'curve')
+            # else:
+            #     print(self.image_frame_ind[i+5], 'straight')
+            # print(self.image_frame_ind[i+5], self.gps_data[i+10][2] - self.gps_data[i][2])
+
 
 ############################################
 #                  variables               #
