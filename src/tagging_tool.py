@@ -874,10 +874,10 @@ class tagging_tool(Frame):
             dis = self.get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
             # print(self.image_frame_ind[i], dis, np.sum(self.adj_dis[i:i+10]))
             diff = np.sum(self.adj_dis[i:i+10]) - dis
-            # if diff > 1:
-            #     print(self.image_frame_ind[i+5], 'curve')
-            # else:
-            #     print(self.image_frame_ind[i+5], 'straight')
+            if diff > 1:
+                print(self.image_frame_ind[i+5], 'curve')
+            else:
+                print(self.image_frame_ind[i+5], 'straight')
             # print(self.image_frame_ind[i+5], self.gps_data[i+10][2] - self.gps_data[i][2])
 
 
