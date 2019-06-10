@@ -2,6 +2,22 @@ import overpy
 import pickle
 from tagging_tool import get_distance
 from collections import deque
+from math import acos, pi
+
+def get_angle(in_node, vertex, out_node, nodes):
+	a = get_distance([ float(nodes[in_node][0]), float(nodes[in_node][1]) ], [ float(nodes[vertex][0]), float(nodes[vertex][1]) ])
+	b = get_distance([ float(nodes[out_node][0]), float(nodes[out_node][1]) ], [ float(nodes[vertex][0]), float(nodes[vertex][1]) ])
+	c = get_distance([ float(nodes[in_node][0]), float(nodes[in_node][1]) ], [ float(nodes[out_node][0]), float(nodes[out_node][1]) ])
+	temp = (a**2 + b**2 - c**2)/(2*a*b)
+	# print(temp)
+	return acos(temp)
+
+def get_type(angle):
+	if angle <= pi/4:
+		return 'branch_in'
+	if angle >= 3*pi/4:
+		return 'branch_out'
+	return 'intersection'
 
 class Overpass_api:
 	def __init__(self, gps_data):
@@ -49,9 +65,11 @@ class Overpass_api:
 				junctions[end2].append(w)
 		# case 2: end to mid
 		way_with_mid_junc = {}
+		mid_junc = set()
 		for w, n_list in self.ways.items():
 			for n in n_list[1:-1]:
 				if n in junctions:
+					mid_junc.add(n)
 					junctions[n].append(w)
 					if w not in way_with_mid_junc:
 						way_with_mid_junc[w] = [n]
@@ -71,8 +89,6 @@ class Overpass_api:
 			for n in n_list:
 				self.nodes.pop(n, None)
 			self.ways.pop(w, None)
-		print(len(self.ways))
-		print(len(self.nodes))
 
 		# find start and end junctions:
 		start_min, end_min = float('inf'), float('inf')
@@ -122,17 +138,22 @@ class Overpass_api:
 				if j not in visited:
 					queue.append(j)
 					path[j] = (cur_junc, w)
+					if self.ways[w].index(cur_junc) > self.ways[w].index(j):
+						self.ways[w].reverse()
 		cur_junc = end_j
-		main_route = []
+		main_route = [cur_junc]
+		main_route_ways = set()
 		while cur_junc != start_j:
-			main_route.append(path[cur_junc])
+			main_route.append(path[cur_junc][0])
+			main_route_ways.add(path[cur_junc][1])
 			cur_junc = path[cur_junc][0]
 		main_route.reverse()
-		# print(start_j, end_j, '\n')
+
 		string = ''
-		for pair in main_route:
-			string += str(pair[1])+','
-		print(string)
+		for n in main_route[1:]:
+			string += str(path[n][1])+','
+		# print(string)
+
 		# deleted unvisited ways
 		delete_juncs = []
 		for j in junctions:
@@ -146,3 +167,32 @@ class Overpass_api:
 						self.ways.pop(w, None) 
 		for j in delete_juncs:
 			junctions.pop(j)
+
+		string = ''
+		count = 0
+		for j in main_route:
+			if len(junctions[j]) == 2:
+				in_node = self.ways[path[j][1]][self.ways[path[j][1]].index(j)-1]
+				if junctions[j].index(path[j][1]) == 0:
+					out_node = self.ways[junctions[j][1]][1]
+				else:
+					out_node = self.ways[junctions[j][0]][1]
+				angle = get_angle(in_node, j, out_node, self.nodes)
+				if j in mid_junc:
+					print(j, get_type(angle))
+				elif angle > pi/3 and angle < 2*pi/3:
+					print(j, 'intersection!')
+				else:
+					print(j, 'none')
+			elif len(junctions[j]) == 3:
+				in_node = self.ways[path[j][1]][-2]
+				for w in junctions[j]:
+					if w not in main_route_ways:
+						out_node = self.ways[w][1]
+				angle = get_angle(in_node, j, out_node, self.nodes)
+				print(j, get_type(angle))
+			else:
+				print(j, 'intersection!')
+		# print(string)
+
+
