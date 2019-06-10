@@ -11,6 +11,15 @@ from math import sin, cos, atan2, sqrt, pi
 # radius of the earth
 R = 6.371*(10**6)
 
+def get_distance(pt1, pt2):
+    pt1 = np.array(pt1) / 180 * pi
+    pt2 = np.array(pt2) / 180 * pi
+    d_phi = pt2[0] - pt1[0]
+    d_lambda = pt2[1] - pt1[1]
+    a = (np.sin(d_phi/2))**2 + cos(pt1[0])*cos(pt2[0])*((sin(d_lambda/2))**2)
+    c = 2 * atan2(sqrt(a), sqrt(1-a))
+    return R * c
+
 class sequence:
     def __init__(self, canvas=None, step=None):
         self.alive = False
@@ -831,15 +840,6 @@ class tagging_tool(Frame):
             s.destroy_plot()
         self.sequences = []
 
-    def get_distance(self, pt1, pt2):
-        pt1 = np.array(pt1) / 180 * pi
-        pt2 = np.array(pt2) / 180 * pi
-        d_phi = pt2[0] - pt1[0]
-        d_lambda = pt2[1] - pt1[1]
-        a = (np.sin(d_phi/2))**2 + cos(pt1[0])*cos(pt2[0])*((sin(d_lambda/2))**2)
-        c = 2 * atan2(sqrt(a), sqrt(1-a))
-        return R * c
-
     def load_gps_get_frame_ind(self):
         gps_data = pickle.load(open(os.path.join(self.video_dir,'vehicle_gps.txt'), 'rb'))
         timestemp_file = open(os.path.join(self.video_dir,self.video_name+'.txt'), 'rb')
@@ -867,11 +867,11 @@ class tagging_tool(Frame):
     def auto_tag(self):
         self.adj_dis = []
         for i in range(len(self.gps_data)-1):
-            dis = self.get_distance(self.gps_data[i][0:2],self.gps_data[i+1][0:2])
+            dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+1][0:2])
             self.adj_dis.append(dis)
             
         for i in range(len(self.gps_data)-10):
-            dis = self.get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
+            dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
             # print(self.image_frame_ind[i], dis, np.sum(self.adj_dis[i:i+10]))
             diff = np.sum(self.adj_dis[i:i+10]) - dis
             if diff > 1:
