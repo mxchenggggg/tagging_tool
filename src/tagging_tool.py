@@ -7,18 +7,7 @@ from shutil import copyfile
 import numpy as np
 import pickle
 from math import sin, cos, atan2, sqrt, pi
-
-# radius of the earth
-R = 6.371*(10**6)
-
-def get_distance(pt1, pt2):
-    pt1 = np.array(pt1) / 180 * pi
-    pt2 = np.array(pt2) / 180 * pi
-    d_phi = pt2[0] - pt1[0]
-    d_lambda = pt2[1] - pt1[1]
-    a = (np.sin(d_phi/2))**2 + cos(pt1[0])*cos(pt2[0])*((sin(d_lambda/2))**2)
-    c = 2 * atan2(sqrt(a), sqrt(1-a))
-    return R * c
+from src.overpass_api import Overpass_api, get_distance
 
 class sequence:
     def __init__(self, canvas=None, step=None):
@@ -865,6 +854,14 @@ class tagging_tool(Frame):
             i += 1
         
     def auto_tag(self):
+        road_type_tags = np.zeros((self.num_imgs, 26), dtype=int)
+        
+        self.overpass_api = Overpass_api(self.gps_data)
+        branch_inout_intesection = self.overpass_api.auto_tag()
+        
+        straight_curve = np.zeros((self.num_imgs, 2), dtype=int)
+        uphill_downhill = np.zeros((self.num_imgs, 2), dtype=int)
+
         self.adj_dis = []
         for i in range(len(self.gps_data)-1):
             dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+1][0:2])
@@ -874,17 +871,42 @@ class tagging_tool(Frame):
             dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
             # print(self.image_frame_ind[i], dis, np.sum(self.adj_dis[i:i+10]))
             diff = np.sum(self.adj_dis[i:i+10]) - dis
-            if diff > 1:
-                print(self.image_frame_ind[i+5], 'curve')
-            else:
-                print(self.image_frame_ind[i+5], 'straight')
+            if diff <= 0.65:
+                # print(self.image_frame_ind[i+5], 'straight')
+                straight_curve[i+5, 0] = 1
+            elif diff > 1:
+                # print(self.image_frame_ind[i+5], 'curve')
+                straight_curve[i+5, 1] = 1
             # print(self.image_frame_ind[i+5], self.gps_data[i+10][2] - self.gps_data[i][2])
+            diff = self.gps_data[i+10][2] - self.gps_data[i][2]
+            if diff > 5:
+                uphill_downhill[i+5, 0] = 1
+            elif diff < -5:
+                uphill_downhill[i+5, 1] = 1
+        
+        road_type_tags[:, 0:2] = straight_curve
+        road_type_tags[:, 7:9] = uphill_downhill
+        road_type_tags[:, 5:7] = branch_inout_intesection[:, 0:2]
+        road_type_tags[:, 3:5] = branch_inout_intesection[:, 0:2]
+        road_type_tags[:, 9] = branch_inout_intesection[:, 2]
 
+        for i in range(len(self.img_files)):
+            cur_img = self.img_files[i]
+            output_file_name = os.path.splitext(cur_img)[0] + '.txt'
+            if os.path.exists(output_file_name):
+                os.remove(output_file_name)
+            tags = road_type_tags[i]
+            if np.sum(tags) != 0:
+                output_file = open(output_file_name, 'w')
+                for i in range(len(tags)):
+                    cur_row = '{:>14}:{:<1}\n'.format(self.headings[i], tags[i])
+                    output_file.write(cur_row)
+                output_file.close()
 
 ############################################
 #                  variables               #
 ############################################
-    road_type_strings = 'Straight Curve Circle Split Merge Branch-in Branch-out Uphill Downhill Intersection Other'.split()
+    road_type_strings = 'Straight Curve Circle Merge Split Branch-in Branch-out Uphill Downhill Intersection Other'.split()
     road_condition_strings = 'Wet Snow Cracked Patched Shadow Occlusion'.split()
     weather_strings = 'Rain Snow Fog Sunny Normal'.split()
     image_quality_strings = 'Blur Dark Dizzy Exposure'.split()
