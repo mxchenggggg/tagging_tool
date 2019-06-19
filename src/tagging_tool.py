@@ -866,7 +866,13 @@ class tagging_tool(Frame):
         for i in range(len(self.gps_data)-1):
             dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+1][0:2])
             self.adj_dis.append(dis)
-            
+
+        stop_pts = set()
+        for i in range(len(self.adj_dis)):
+            if self.adj_dis[i] < 1:
+                # print(self.image_frame_ind[i], self.adj_dis[i])
+                stop_pts.add(i)    
+        
         for i in range(len(self.gps_data)-10):
             dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
             # print(self.image_frame_ind[i], dis, np.sum(self.adj_dis[i:i+10]))
@@ -896,10 +902,10 @@ class tagging_tool(Frame):
             if os.path.exists(output_file_name):
                 os.remove(output_file_name)
             tags = road_type_tags[i]
-            if np.sum(tags) != 0:
+            if np.sum(tags) != 0 and i not in stop_pts:
                 output_file = open(output_file_name, 'w')
-                for i in range(len(tags)):
-                    cur_row = '{:>14}:{:<1}\n'.format(self.headings[i], tags[i])
+                for j in range(len(tags)):
+                    cur_row = '{:>14}:{:<1}\n'.format(self.headings[j], tags[j])
                     output_file.write(cur_row)
                 output_file.close()
 

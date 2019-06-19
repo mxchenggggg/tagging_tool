@@ -172,7 +172,7 @@ class Overpass_api:
 		string = ''
 		for p in path:
 			string += str(path[p][1]) + ','
-		print(string)
+		# print(string)
 
 		# deleted unvisited ways
 		delete_juncs = []
@@ -188,11 +188,12 @@ class Overpass_api:
 		for j in delete_juncs:
 			junctions.pop(j)
 
-		
-
+	
 		main_route_junc_type = []
 		for j in main_route:
-			if len(junctions[j]) == 2:
+			if len(junctions[j]) == 1:
+				main_route_junc_type.append([0, 0, 0])
+			elif len(junctions[j]) == 2:
 				in_node = self.ways[path[j][1]][self.ways[path[j][1]].index(j)-1]
 				if junctions[j].index(path[j][1]) == 0:
 					out_node = self.ways[junctions[j][1]][1]
