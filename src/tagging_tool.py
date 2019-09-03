@@ -73,7 +73,10 @@ class tagging_tool(Frame):
         self.sequences = []
         self.init_window()
         master.bind('s',lambda event: self.previous_image())
+        # master.bind('s',lambda event: self.save_to_not_sure())
         master.bind('w',lambda event: self.next_image())
+        # master.bind('a',lambda event: self.save_to_cracked())
+        # master.bind('d',lambda event: self.save_to_not_cracked())
 
     
 ############################################
@@ -379,7 +382,7 @@ class tagging_tool(Frame):
         self.video_handle.release()
 
     def load_video_and_auto_tag(self):
-        value =  filedialog.askopenfilename(initialdir = '/mnt/storage/public/mcity_data/Batch5',title = "Please select video",filetypes = (("MKV files","*.mkv"),("AVI files","*.avi"),("MP4 files","*.mp4*"), ("All files","*.*")))
+        value =  filedialog.askopenfilename(initialdir = '/media/ac12/Data/tagging_tool', title = "Please select video",filetypes = (("MKV files","*.mkv"),("AVI files","*.avi"),("MP4 files","*.mp4*"), ("All files","*.*")))
         if value is () or value is '':
             return
         self.reset()
@@ -427,7 +430,8 @@ class tagging_tool(Frame):
         
         
     def load_folder(self):
-        value = filedialog.askdirectory(initialdir = '/mnt/storage/public/mcity_data/Batch5', title = "Please select folder")
+        #  '/media/ac12/Data/tagging_tool'
+        value = filedialog.askdirectory(initialdir ='../', title = "Please select folder")
         if value is () or value is '':
             return
         self.reset()
@@ -441,10 +445,10 @@ class tagging_tool(Frame):
 
         self.img_files = sorted(glob.glob(self.img_folder + '/*.jpg'))
         self.num_imgs = len(self.img_files)
-        # loc1, loc2 = self.img_files[0].find('frame_'), self.img_files[0].find('.jpg')
-        # loc3, loc4 = self.img_files[1].find('frame_'), self.img_files[1].find('.jpg')
-        # self.step = int(self.img_files[1][loc3+6:loc4]) - int(self.img_files[0][loc1+6:loc2])
-        # self.step_strvar.set(str(self.step))
+        loc1, loc2 = self.img_files[0].find('frame_'), self.img_files[0].find('.jpg')
+        loc3, loc4 = self.img_files[1].find('frame_'), self.img_files[1].find('.jpg')
+        self.step = int(self.img_files[1][loc3+6:loc4]) - int(self.img_files[0][loc1+6:loc2])
+        self.step_strvar.set(str(self.step))
         self.step = None
         self.show_message('Folder loaded! Step is {}.'.format(self.step))
 
@@ -503,6 +507,8 @@ class tagging_tool(Frame):
     def next_image(self):
         if self.img_iter == -1 or self.img_iter == self.num_imgs - 1:
             return
+        # print('current ind: ', self.img_iter, self.img_files[self.img_iter])
+        
         self.save_tags()
         self.img_iter += 1
         # print(self.cur_sequence.end_ind)
@@ -741,8 +747,8 @@ class tagging_tool(Frame):
         self.image_canvas.create_image(0, 0, image=render, anchor=NW)
         self.image_canvas.photo = render
         # self.image_iter_strvar.set(str(self.img_iter * self.step))
-        self.image_iter_strvar.set(str(self.image_frame_ind[self.img_iter]))
-        self.image_canvas.update()
+        # self.image_iter_strvar.set(str(self.image_frame_ind[self.img_iter]))
+        # self.image_canvas.update()
                 
     def show_message(self, content):
         x, y = self.master.winfo_x(), self.master.winfo_y()
@@ -855,46 +861,54 @@ class tagging_tool(Frame):
         
     def auto_tag(self):
         road_type_tags = np.zeros((self.num_imgs, 26), dtype=int)
-        
-        self.overpass_api = Overpass_api(self.gps_data)
-        branch_inout_intesection = self.overpass_api.auto_tag()
-        
-        straight_curve = np.zeros((self.num_imgs, 2), dtype=int)
-        uphill_downhill = np.zeros((self.num_imgs, 2), dtype=int)
 
+        # calculate adjacent distances
         self.adj_dis = []
         for i in range(len(self.gps_data)-1):
             dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+1][0:2])
             self.adj_dis.append(dis)
 
+        # find all stop points
         stop_pts = set()
         for i in range(len(self.adj_dis)):
             if self.adj_dis[i] < 1:
                 # print(self.image_frame_ind[i], self.adj_dis[i])
                 stop_pts.add(i)    
         
-        for i in range(len(self.gps_data)-10):
-            dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
-            # print(self.image_frame_ind[i], dis, np.sum(self.adj_dis[i:i+10]))
-            diff = np.sum(self.adj_dis[i:i+10]) - dis
-            if diff <= 0.65:
-                # print(self.image_frame_ind[i+5], 'straight')
-                straight_curve[i+5, 0] = 1
-            elif diff > 1:
-                # print(self.image_frame_ind[i+5], 'curve')
-                straight_curve[i+5, 1] = 1
-            # print(self.image_frame_ind[i+5], self.gps_data[i+10][2] - self.gps_data[i][2])
-            diff = self.gps_data[i+10][2] - self.gps_data[i][2]
-            if diff > 5:
-                uphill_downhill[i+5, 0] = 1
-            elif diff < -5:
-                uphill_downhill[i+5, 1] = 1
+        self.overpass_api = Overpass_api(self.gps_data, self.adj_dis)
+        auto_tag_result = self.overpass_api.auto_tag()
+
+        # straight_curve = np.zeros((self.num_imgs, 2), dtype=int)
+        # uphill_downhill = np.zeros((self.num_imgs, 2), dtype=int)
+        # 
+        # for i in range(len(self.gps_data)-10):
+        #     dis = get_distance(self.gps_data[i][0:2],self.gps_data[i+10][0:2])
+        #     # print(self.image_frame_ind[i], dis, np.sum(self.adj_dis[i:i+10]))
+        #     diff = np.sum(self.adj_dis[i:i+10]) - dis
+        #     if diff <= 0.65:
+        #         # print(self.image_frame_ind[i+5], 'straight')
+        #         straight_curve[i+5, 0] = 1
+        #     elif diff > 1:
+        #         # print(self.image_frame_ind[i+5], 'curve')
+        #         straight_curve[i+5, 1] = 1
+        #     # print(self.image_frame_ind[i+5], self.gps_data[i+10][2] - self.gps_data[i][2])
+        #     diff = self.gps_data[i+10][2] - self.gps_data[i][2]
+        #     if diff > 5:
+        #         for j in range(3, 8):
+        #             uphill_downhill[i+j, 0] = 1
+        #     elif diff < -5:
+        #         for j in range(3, 8):
+        #             uphill_downhill[i+j, 1] = 1
         
-        road_type_tags[:, 0:2] = straight_curve
-        road_type_tags[:, 7:9] = uphill_downhill
-        road_type_tags[:, 5:7] = branch_inout_intesection[:, 0:2]
-        road_type_tags[:, 3:5] = branch_inout_intesection[:, 0:2]
-        road_type_tags[:, 9] = branch_inout_intesection[:, 2]
+        
+        road_type_tags[:, 0:2] = auto_tag_result[:, 5:7]
+        road_type_tags[:, 7:9] = auto_tag_result[:, 7:9]
+        # branch_in branch_out
+        road_type_tags[:, 5:7] = auto_tag_result[:, 0:2]
+        # merge split    
+        road_type_tags[:, 3:5] = auto_tag_result[:, 3:5]
+        # intersection
+        road_type_tags[:, 9] = auto_tag_result[:, 2]
 
         for i in range(len(self.img_files)):
             cur_img = self.img_files[i]
@@ -908,6 +922,24 @@ class tagging_tool(Frame):
                     cur_row = '{:>14}:{:<1}\n'.format(self.headings[j], tags[j])
                     output_file.write(cur_row)
                 output_file.close()
+
+    def save_to_cracked(self):
+        folder = '/media/ac12/Data/tagging_tool/shadow_relabeled'
+        cur_img = cv2.imread(self.img_files[self.img_iter])
+        cv2.imwrite(os.path.join(folder,os.path.basename(self.img_files[self.img_iter])), cur_img)
+        self.next_image()
+
+    def save_to_not_cracked(self):
+        folder = '/media/ac12/Data/tagging_tool/not_shadow_relabeled'
+        cur_img = cv2.imread(self.img_files[self.img_iter])
+        cv2.imwrite(os.path.join(folder,os.path.basename(self.img_files[self.img_iter])), cur_img)
+        self.next_image()
+
+    def save_to_not_sure(self):
+        folder = '/media/ac12/Data/tagging_tool/shadow_not_sure'
+        cur_img = cv2.imread(self.img_files[self.img_iter])
+        cv2.imwrite(os.path.join(folder,os.path.basename(self.img_files[self.img_iter])), cur_img)
+        self.next_image()
 
 ############################################
 #                  variables               #
